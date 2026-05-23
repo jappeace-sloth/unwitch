@@ -1,5 +1,21 @@
 # Change log for unwitch project
 
+## Version 3.1.0
+
+### Added
++ New Text conversions ported from the from-text library, using explicit
+  named functions instead of typeclasses:
+  - toLazyByteStringUtf8 — encode Text as UTF-8 lazy ByteString
+  - toByteStringBuilderUtf8 — encode Text as UTF-8 ByteString Builder
+  - toTextBuilder — convert Text to lazy Text Builder
+  - toShortByteStringUtf8 — encode Text as UTF-8 ShortByteString
+  - toPosixString — encode Text as UTF-8 PosixString (GHC only)
+  - toWindowsString — encode Text as UTF-16 LE WindowsString (GHC only)
+  - toOsString — encode Text to platform-native OsString (GHC only)
++ New dependency: os-string (for OsString/PosixString/WindowsString support)
++ All new conversions are guarded behind __GLASGOW_HASKELL__ for MicroHs
+  compatibility
+
 ## Version 3.0.0
 
 ### Breaking changes (GHC only)
