@@ -9,11 +9,11 @@ module Unwitch.Convert.Text
   , toByteStringUtf32LE
   , toByteStringUtf32BE
   , toByteStringLatin1
+#ifdef __GLASGOW_HASKELL__
   , toLazyByteStringUtf8
   , toByteStringBuilderUtf8
   , toTextBuilder
   , toShortByteStringUtf8
-#ifdef __GLASGOW_HASKELL__
   , toPosixString
   , toWindowsString
   , toOsString
@@ -23,18 +23,18 @@ where
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BSC8
-import Data.ByteString.Lazy qualified as LBS
-import Data.ByteString.Builder qualified as BB
-import Data.ByteString.Short (ShortByteString)
-import Data.ByteString.Short qualified as SBS
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy qualified as LT
-import Data.Text.Lazy.Builder qualified as TLB
 
 #ifdef __GLASGOW_HASKELL__
+import Data.ByteString.Lazy qualified as LBS
+import Data.ByteString.Builder qualified as BB
+import Data.ByteString.Short qualified as SBS
+import Data.ByteString.Short (ShortByteString)
 import Data.Coerce (coerce)
+import Data.Text.Lazy.Builder qualified as TLB
 import System.OsString qualified as OS
 import System.OsString.Internal.Types qualified as OSIT
 import System.OsString.Posix qualified as OSP
@@ -78,6 +78,7 @@ toByteStringLatin1 t = if all isLatin1 str
 isLatin1 :: Char -> Bool
 isLatin1 c = c <= '\xFF'
 
+#ifdef __GLASGOW_HASKELL__
 -- | Encode as UTF-8 lazy 'LBS.ByteString'.
 toLazyByteStringUtf8 :: Text -> LBS.ByteString
 toLazyByteStringUtf8 = LBS.fromStrict . TE.encodeUtf8
@@ -94,7 +95,6 @@ toTextBuilder = TLB.fromText
 toShortByteStringUtf8 :: Text -> ShortByteString
 toShortByteStringUtf8 = SBS.toShort . TE.encodeUtf8
 
-#ifdef __GLASGOW_HASKELL__
 -- | Encode as UTF-8 'OSP.PosixString'.
 toPosixString :: Text -> OSP.PosixString
 toPosixString = coerce . SBS.toShort . TE.encodeUtf8

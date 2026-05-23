@@ -2,16 +2,19 @@ module Test.Convert.TextSpec (spec) where
 
 import Test.Hspec
 import Data.Text qualified as T
-import Data.ByteString.Lazy qualified as LBS
-import Data.ByteString.Builder qualified as BB
-import Data.ByteString.Short qualified as SBS
-import Data.Text.Lazy.Builder qualified as TLB
-import Data.Text.Lazy qualified as LT
 import qualified Unwitch.Convert.Text as Text
 import qualified Unwitch.Convert.LazyText as LazyText
 import qualified Unwitch.Convert.ByteString as ByteString
+
+#ifdef __GLASGOW_HASKELL__
+import Data.ByteString.Lazy qualified as LBS
+import Data.ByteString.Builder qualified as BB
+import Data.ByteString.Short qualified as SBS
+import Data.Text.Lazy qualified as LT
+import Data.Text.Lazy.Builder qualified as TLB
 import qualified System.OsString as OS
 import qualified System.OsString.Posix as OSP
+#endif
 
 spec :: Spec
 spec = describe "Unwitch.Convert.Text" $ do
@@ -74,6 +77,7 @@ spec = describe "Unwitch.Convert.Text" $ do
       let t = T.pack "\x0100" -- Latin Extended-A
       in Text.toByteStringLatin1 t `shouldBe` Nothing
 
+#ifdef __GLASGOW_HASKELL__
   describe "toLazyByteStringUtf8" $ do
     it "encodes ASCII" $
       Text.toLazyByteStringUtf8 "hello" `shouldBe` "hello"
@@ -108,3 +112,4 @@ spec = describe "Unwitch.Convert.Text" $ do
       let t = T.pack "hello/world.txt"
           expected = OS.unsafeEncodeUtf (T.unpack t)
       in Text.toOsString t `shouldBe` expected
+#endif
