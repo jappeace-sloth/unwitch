@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | Conversions from 'Data.Text.Text'.
 module Unwitch.Convert.Text
   ( toLazyText
@@ -9,15 +11,47 @@ module Unwitch.Convert.Text
   , toByteStringUtf32LE
   , toByteStringUtf32BE
   , toByteStringLatin1
+  , toLazyByteStringUtf8
+  , toByteStringBuilderUtf8
+  , toTextBuilder
+  , toShortByteStringUtf8
+#ifdef __GLASGOW_HASKELL__
+  , toPosixString
+  , toWindowsString
+  , toOsString
+#endif
   )
 where
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BSC8
+import Data.ByteString.Lazy qualified as LBS
+import Data.ByteString.Builder qualified as BB
+import Data.ByteString.Short (ShortByteString)
+import Data.ByteString.Short qualified as SBS
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy qualified as LT
+import Data.Text.Lazy.Builder qualified as TLB
+
+#ifdef __GLASGOW_HASKELL__
+import Data.Array.Byte (ByteArray(..))
+import Data.Bits (shiftR, (.&.))
+import Data.Char (ord)
+import Data.Coerce (coerce)
+import Data.Text.Array qualified as TA
+import Data.Text.Internal qualified as TI
+import Data.Text.Unsafe qualified as TU
+import GHC.Exts (sizeofByteArray#, writeWord16Array#)
+import GHC.Int (Int(..))
+import GHC.ST (ST(..), runST)
+import GHC.Word (Word16(..))
+import System.OsString qualified as OS
+import System.OsString.Data.ByteString.Short.Internal qualified as OSI
+import System.OsString.Internal.Types qualified as OSIT
+import System.OsString.Posix qualified as OSP
+#endif
 
 toLazyText :: Text -> LT.Text
 #ifdef __GLASGOW_HASKELL__
@@ -56,3 +90,71 @@ toByteStringLatin1 t = if all isLatin1 str
 
 isLatin1 :: Char -> Bool
 isLatin1 c = c <= '\xFF'
+
+-- | Encode as UTF-8 lazy 'LBS.ByteString'.
+toLazyByteStringUtf8 :: Text -> LBS.ByteString
+toLazyByteStringUtf8 = LBS.fromStrict . TE.encodeUtf8
+
+-- | Encode as UTF-8 'BB.Builder'.
+toByteStringBuilderUtf8 :: Text -> BB.Builder
+toByteStringBuilderUtf8 = TE.encodeUtf8Builder
+
+-- | Convert to a lazy 'TLB.Builder'.
+toTextBuilder :: Text -> TLB.Builder
+toTextBuilder = TLB.fromText
+
+-- | Encode as UTF-8 'ShortByteString'.
+toShortByteStringUtf8 :: Text -> ShortByteString
+toShortByteStringUtf8 = SBS.toShort . TE.encodeUtf8
+
+#ifdef __GLASGOW_HASKELL__
+-- | Encode as UTF-8 into a 'ByteArray'.
+toByteArray :: Text -> ByteArray
+toByteArray (TI.Text arr@(ByteArray ba) 0 len)
+  | I# (sizeofByteArray# ba) == len = arr
+toByteArray (TI.Text arr off len) = TA.run $ do
+  marr <- TA.new len
+  TA.copyI len marr 0 arr off
+  pure marr
+
+-- | Encode as UTF-8 'OSP.PosixString'.
+toPosixString :: Text -> OSP.PosixString
+toPosixString = coerce . toByteArray
+
+-- | Encode as UTF-16 LE 'OSIT.WindowsString'.
+toWindowsString :: Text -> OSIT.WindowsString
+toWindowsString (TI.Text src off len) = runST $ do
+  marr <- TA.new (len * 2)
+  let go srcOff dstOff
+        | srcOff >= len + off = do
+            TA.shrinkM marr (dstOff * 2)
+            arr <- TA.unsafeFreeze marr
+            pure $ coerce arr
+        | otherwise = do
+            let !(TU.Iter codepoint delta) = TU.iterArray src srcOff
+                codeValue = ord codepoint
+            delta' <-
+              if codeValue <= 0xFFFF
+                then do
+                  writeWord16LE marr dstOff (fromIntegral codeValue)
+                  pure 1
+                else do
+                  let shifted = codeValue - 0x10000
+                  writeWord16LE marr dstOff (fromIntegral $ shifted `shiftR` 10 + 0xD800)
+                  writeWord16LE marr (dstOff + 1) (fromIntegral $ shifted .&. 0x3FF + 0xDC00)
+                  pure 2
+            go (srcOff + delta) (dstOff + delta')
+  go off 0
+  where
+    writeWord16LE :: TA.MArray s -> Int -> Word16 -> ST s ()
+    writeWord16LE (TA.MutableByteArray marr) (I# offset) (W16# w16) = ST $ \s ->
+      case writeWord16Array# marr offset (OSI.word16ToLE# w16) s of
+        s' -> (# s', () #)
+
+-- | Encode to the platform's native 'OS.OsString'.
+-- UTF-16 LE on Windows, UTF-8 on POSIX.
+toOsString :: Text -> OS.OsString
+toOsString = case OS.coercionToPlatformTypes of
+  Left{}  -> coerce . toWindowsString
+  Right{} -> coerce . toPosixString
+#endif

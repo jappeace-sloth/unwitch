@@ -2,9 +2,16 @@ module Test.Convert.TextSpec (spec) where
 
 import Test.Hspec
 import Data.Text qualified as T
+import Data.ByteString.Lazy qualified as LBS
+import Data.ByteString.Builder qualified as BB
+import Data.ByteString.Short qualified as SBS
+import Data.Text.Lazy.Builder qualified as TLB
+import Data.Text.Lazy qualified as LT
 import qualified Unwitch.Convert.Text as Text
 import qualified Unwitch.Convert.LazyText as LazyText
 import qualified Unwitch.Convert.ByteString as ByteString
+import qualified System.OsString as OS
+import qualified System.OsString.Posix as OSP
 
 spec :: Spec
 spec = describe "Unwitch.Convert.Text" $ do
@@ -66,3 +73,38 @@ spec = describe "Unwitch.Convert.Text" $ do
     it "fails for chars above 0xFF" $
       let t = T.pack "\x0100" -- Latin Extended-A
       in Text.toByteStringLatin1 t `shouldBe` Nothing
+
+  describe "toLazyByteStringUtf8" $ do
+    it "encodes ASCII" $
+      Text.toLazyByteStringUtf8 "hello" `shouldBe` "hello"
+    it "produces same bytes as toByteStringUtf8" $
+      let t = T.pack "caf\x00E9"
+      in LBS.toStrict (Text.toLazyByteStringUtf8 t) `shouldBe` Text.toByteStringUtf8 t
+
+  describe "toByteStringBuilderUtf8" $
+    it "produces same bytes as toByteStringUtf8" $
+      let t = T.pack "caf\x00E9 \x1F600"
+      in LBS.toStrict (BB.toLazyByteString (Text.toByteStringBuilderUtf8 t))
+           `shouldBe` Text.toByteStringUtf8 t
+
+  describe "toTextBuilder" $
+    it "produces same text as input" $
+      let t = T.pack "hello \x00E9\x1F600"
+      in LT.toStrict (TLB.toLazyText (Text.toTextBuilder t)) `shouldBe` t
+
+  describe "toShortByteStringUtf8" $
+    it "produces same bytes as toByteStringUtf8" $
+      let t = T.pack "caf\x00E9 \x1F600"
+      in SBS.fromShort (Text.toShortByteStringUtf8 t) `shouldBe` Text.toByteStringUtf8 t
+
+  describe "toPosixString" $
+    it "matches encodeUtf from os-string" $
+      let t = T.pack "caf\x00E9"
+          expected = OSP.unsafeEncodeUtf (T.unpack t)
+      in Text.toPosixString t `shouldBe` expected
+
+  describe "toOsString" $
+    it "matches encodeUtf from os-string" $
+      let t = T.pack "hello/world.txt"
+          expected = OS.unsafeEncodeUtf (T.unpack t)
+      in Text.toOsString t `shouldBe` expected
